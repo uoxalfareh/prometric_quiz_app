@@ -1,0 +1,274 @@
+import 'package:flutter/material.dart';
+
+void main() => runApp(PrometricApp());
+
+class PrometricApp extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      home: QuestionListScreen(),
+    );
+  }
+}
+
+class Question {
+  String question;
+  List<String> options;
+  int correctAnswerIndex;
+
+  Question({
+    required this.question,
+    required this.options,
+    required this.correctAnswerIndex,
+  });
+}
+
+class QuestionListScreen extends StatefulWidget {
+  @override
+  _QuestionListScreenState createState() => _QuestionListScreenState();
+}
+
+class _QuestionListScreenState extends State<QuestionListScreen> {
+  List<Question> questions = [];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text('AZ Prometric')),
+      body: questions.isEmpty
+          ? Center(child: Text('No questions added yet'))
+          : ListView.builder(
+              itemCount: questions.length,
+              itemBuilder: (context, index) {
+                return ListTile(
+                  title: Text(questions[index].question),
+                  subtitle: Text(questions[index].options.join(', ')),
+                );
+              },
+            ),
+      floatingActionButton: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          FloatingActionButton.extended(
+            heroTag: 'test',
+            label: Text('Start Test'),
+            icon: Icon(Icons.quiz),
+            onPressed: questions.isEmpty
+                ? null
+                : () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => TestScreen(questions: questions),
+                      ),
+                    ),
+          ),
+          SizedBox(height: 10),
+          FloatingActionButton(
+            heroTag: 'add',
+            child: Icon(Icons.add),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => AddQuestionScreen(
+                  onAdd: (newQuestion) {
+                    setState(() {
+                      questions.add(newQuestion);
+                    });
+                  },
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class AddQuestionScreen extends StatefulWidget {
+  final Function(Question) onAdd;
+
+  AddQuestionScreen({required this.onAdd});
+
+  @override
+  _AddQuestionScreenState createState() => _AddQuestionScreenState();
+}
+
+class _AddQuestionScreenState extends State<AddQuestionScreen> {
+  final TextEditingController questionController = TextEditingController();
+  final List<TextEditingController> optionControllers =
+      List.generate(4, (_) => TextEditingController());
+  int correctAnswerIndex = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text('Add Question')),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: ListView(
+          children: [
+            TextField(
+              controller: questionController,
+              decoration: InputDecoration(labelText: 'Question'),
+            ),
+            ...List.generate(
+              4,
+              (index) => TextField(
+                controller: optionControllers[index],
+                decoration:
+                    InputDecoration(labelText: 'Option ${String.fromCharCode(65 + index)}'),
+              ),
+            ),
+            SizedBox(height: 20),
+            Text('Select Correct Answer:'),
+            DropdownButton<int>(
+              value: correctAnswerIndex,
+              items: List.generate(
+                4,
+                (index) => DropdownMenuItem(
+                  value: index,
+                  child: Text('${String.fromCharCode(65 + index)}'),
+                ),
+              ),
+              onChanged: (value) => setState(() => correctAnswerIndex = value!),
+            ),
+            SizedBox(height: 20),
+            ElevatedButton(
+              child: Text('Add Question'),
+              onPressed: () {
+                if (questionController.text.isEmpty ||
+                    optionControllers.any((c) => c.text.isEmpty)) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Please fill all fields')),
+                  );
+                  return;
+                }
+                widget.onAdd(
+                  Question(
+                    question: questionController.text,
+                    options: optionControllers.map((c) => c.text).toList(),
+                    correctAnswerIndex: correctAnswerIndex,
+                  ),
+                );
+                Navigator.pop(context);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class TestScreen extends StatefulWidget {
+  final List<Question> questions;
+
+  TestScreen({required this.questions});
+
+  @override
+  _TestScreenState createState() => _TestScreenState();
+}
+
+class _TestScreenState extends State<TestScreen> {
+  int currentIndex = 0;
+  int score = 0;
+  bool answered = false;
+  int? selectedAnswer;
+
+  void answer(int index) {
+    if (answered) return;
+
+    setState(() {
+      selectedAnswer = index;
+      answered = true;
+      if (index == widget.questions[currentIndex].correctAnswerIndex) {
+        score++;
+      }
+    });
+  }
+
+  void next() {
+    if (!answered) return;
+    if (currentIndex < widget.questions.length - 1) {
+      setState(() {
+        currentIndex++;
+        answered = false;
+        selectedAnswer = null;
+      });
+    } else {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ResultScreen(score: score, total: widget.questions.length),
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final q = widget.questions[currentIndex];
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Question ${currentIndex + 1}/${widget.questions.length}'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            Text(q.question, style: TextStyle(fontSize: 20)),
+            SizedBox(height: 20),
+            ...List.generate(4, (i) {
+              Color? color;
+              if (answered) {
+                if (i == q.correctAnswerIndex) {
+                  color = Colors.green[300];
+                } else if (i == selectedAnswer) {
+                  color = Colors.red[300];
+                }
+              }
+              return Container(
+                margin: EdgeInsets.symmetric(vertical: 6),
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: color),
+                  onPressed: () => answer(i),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('${String.fromCharCode(65 + i)}. ${q.options[i]}'),
+                  ),
+                ),
+              );
+            }),
+            Spacer(),
+            ElevatedButton(
+              onPressed: answered ? next : null,
+              child: Text(currentIndex == widget.questions.length - 1 ? 'Finish' : 'Next'),
+            )
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class ResultScreen extends StatelessWidget {
+  final int score;
+  final int total;
+
+  ResultScreen({required this.score, required this.total});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text('Result')),
+      body: Center(
+        child: Text(
+          'Your score: $score / $total',
+          style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+        ),
+      ),
+    );
+  }
+}
